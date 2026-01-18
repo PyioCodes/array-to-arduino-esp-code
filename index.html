@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>OLED Bitmap Converter</title>
+    <style>
+        body { font-family: sans-serif; background: #1a1a1a; color: #eee; padding: 20px; text-align: center; }
+        #drop-zone { border: 2px dashed #444; padding: 40px; margin: 20px auto; width: 300px; cursor: pointer; border-radius: 10px; }
+        #drop-zone:hover { border-color: #007bff; background: #222; }
+        canvas { display: none; }
+        textarea { width: 90%; height: 300px; background: #000; color: #0f0; font-family: monospace; padding: 10px; border: 1px solid #333; margin-top: 20px; border-radius: 5px; }
+        .controls { margin: 20px; }
+        button { padding: 10px 20px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+    <h2>OLED (SSD1306) Image Converter</h2>
+    <p>Görseli buraya bırak (128x64 önerilir)</p>
+    
+    <div id="drop-zone">Resmi buraya sürükle veya tıkla</div>
+    <input type="file" id="file-input" style="display:none" accept="image/*">
+
+    <div class="controls">
+        Eşik Değeri (Kontrast): <input type="range" id="threshold" min="0" max="255" value="128">
+    </div>
+
+    <canvas id="canvas"></canvas>
+    <textarea id="output" readonly placeholder="C++ Array burada görünecek..."></textarea>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const output = document.getElementById('output');
+        const thresholdInput = document.getElementById('threshold');
+
+        dropZone.onclick = () => fileInput.click();
+
+        fileInput.onchange = (e) => processImage(e.target.files[0]);
+
+        dropZone.ondragover = (e) => { e.preventDefault(); dropZone.style.borderColor = '#007bff'; };
+        dropZone.ondragleave = () => { dropZone.style.borderColor = '#444'; };
+        dropZone.ondrop = (e) => {
+            e.preventDefault();
+            processImage(e.dataTransfer.files[0]);
+        };
+
+        thresholdInput.oninput = () => { if (currentImg) convert(); };
+
+        let currentImg = null;
+
+        function processImage(file) {
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                currentImg = new Image();
+                currentImg.onload = () => {
+                    canvas.width = 128;
+                    canvas.height = 64;
+                    // Görseli 128x64'e sığdır (boyutlandırma)
+                    ctx.drawImage(currentImg, 0, 0, 128, 64);
+                    convert();
+                };
+                currentImg.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function convert() {
+            const imgData = ctx.getImageData(0, 0, 128, 64);
+            const data = imgData.data;
+            const threshold = parseInt(thresholdInput.value);
+            let bytes = [];
+            
+            for (let y = 0; y < 64; y++) {
+                for (let x = 0; x < 128; x += 8) {
+                    let byte = 0;
+                    for (let bit = 0; bit < 8; bit++) {
+                        const idx = ((y * 128) + (x + bit)) * 4;
+                        const avg = (data[idx] + data[idx+1] + data[idx+2]) / 3;
+                        if (avg < threshold) { // Siyah piksel (SSD1306_WHITE için genelde tersi kullanılır ama bu mantık çoğu araca uygundur)
+                            byte |= (1 << (7 - bit));
+                        }
+                    }
+                    bytes.push('0x' + byte.toString(16).padStart(2, '0'));
+                }
+            }
+
+            let result = "const unsigned char myBitmap [] PROGMEM = {\n  ";
+            for (let i = 0; i < bytes.length; i++) {
+                result += bytes[i] + (i === bytes.length - 1 ? "" : ", ");
+                if ((i + 1) % 16 === 0) result += "\n  ";
+            }
+            result += "\n};";
+            
+            output.value = result;
+        }
+    </script>
+</body>
+</html>
