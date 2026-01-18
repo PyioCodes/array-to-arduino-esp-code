@@ -1,41 +1,43 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>OLED Code Generator</title>
+    <title>OLED Static Code Generator</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #e0e0e0; padding: 20px; }
-        .container { max-width: 900px; margin: 0 auto; background: #1e1e1e; padding: 20px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-        textarea { width: 100%; height: 200px; background: #2d2d2d; color: #a6e22e; border: 1px solid #444; padding: 10px; font-family: monospace; border-radius: 5px; resize: vertical; }
-        .controls { margin: 20px 0; display: flex; gap: 20px; align-items: center; }
-        select, button { padding: 10px 15px; border-radius: 5px; border: none; cursor: pointer; }
-        button { background: #007bff; color: white; font-weight: bold; }
-        button:hover { background: #0056b3; }
-        #final-code { height: 400px; margin-top: 20px; background: #000; color: #66d9ef; }
-        label { font-weight: bold; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f0f0f; color: #ffffff; padding: 20px; line-height: 1.6; }
+        .container { max-width: 900px; margin: 0 auto; background: #1a1a1a; padding: 30px; border-radius: 12px; border: 1px solid #333; }
+        h2 { color: #00d4ff; border-bottom: 2px solid #00d4ff; padding-bottom: 10px; margin-top: 0; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #bbb; }
+        textarea { width: 100%; height: 180px; background: #000; color: #00ff00; border: 1px solid #444; padding: 12px; font-family: 'Cascadia Code', 'Courier New', monospace; border-radius: 6px; margin-bottom: 20px; box-sizing: border-box; }
+        .controls { display: flex; gap: 15px; align-items: center; margin-bottom: 25px; background: #252525; padding: 15px; border-radius: 8px; }
+        select, button { padding: 12px 24px; border-radius: 5px; border: none; font-size: 14px; font-weight: bold; cursor: pointer; outline: none; }
+        select { background: #333; color: #fff; border: 1px solid #444; }
+        button { background: #00d4ff; color: #000; transition: background 0.2s; }
+        button:hover { background: #0099bb; }
+        #final-code { height: 450px; color: #ff9d00; border-color: #555; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>OLED Projesi İçin Kod Oluşturucu</h2>
+    <h2>OLED STATIC CODE GENERATOR</h2>
     
-    <label>1. Bitmap Array'ini Buraya Yapıştır (0x... ile başlayan kısım):</label>
+    <label>1. PASTE YOUR BITMAP ARRAY HERE:</label>
     <textarea id="array-input" placeholder="const unsigned char myBitmap [] PROGMEM = { ... };"></textarea>
 
     <div class="controls">
-        <div>
-            <label>Platform:</label>
-            <select id="platform">
-                <option value="esp32">ESP32 (GPIO 21/22)</option>
-                <option value="arduino">Arduino (A4/A5)</option>
+        <div style="flex-grow: 1;">
+            <label>SELECT PLATFORM:</label>
+            <select id="platform" style="width: 100%;">
+                <option value="esp32">ESP32 (Default I2C: SDA 21, SCL 22)</option>
+                <option value="arduino">Arduino (Standard I2C: A4/A5)</option>
             </select>
         </div>
-        <button onclick="generateCode()">Kodu Oluştur (Perde Efektli)</button>
+        <button onclick="generateCode()" style="margin-top: 25px;">GENERATE SKETCH</button>
     </div>
 
-    <label>2. Oluşturulan Arduino Sketch:</label>
-    <textarea id="final-code" readonly></textarea>
+    <label>2. READY-TO-USE ARDUINO CODE (SETUP ONLY):</label>
+    <textarea id="final-code" readonly placeholder="Your generated code will appear here..."></textarea>
 </div>
 
 <script>
@@ -45,15 +47,15 @@ function generateCode() {
     const finalCodeBox = document.getElementById('final-code');
 
     if(!arrayData.includes('0x')) {
-        alert("Lütfen geçerli bir hex array yapıştırın!");
+        alert("Error: Please paste a valid Hex Array!");
         return;
     }
 
-    let setupConfig = (platform === 'esp32') 
-        ? "  Wire.begin(21, 22); // ESP32 Standart SDA, SCL\n  Wire.setClock(400000);" 
-        : "  // Arduino'da SDA=A4, SCL=A5 kullanılır\n  Wire.setClock(400000);";
+    let wireConfig = (platform === 'esp32') 
+        ? "Wire.begin(21, 22);" 
+        : "Wire.begin();";
 
-    const fullCode = `#include <Wire.h>
+    const sketch = `#include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
@@ -67,34 +69,23 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 ${arrayData}
 
 void setup() {
-${setupConfig}
+  ${wireConfig}
+  
   if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
-    for(;;);
+    for(;;); // Halt if screen not found
   }
+
   display.clearDisplay();
+  display.drawBitmap(0, 0, myBitmap, 128, 64, SSD1306_WHITE);
   display.display();
 }
 
 void loop() {
-  // 1. TAM KARANLIK (5 SANİYE)
-  display.clearDisplay();
-  display.display();
-  delay(5000);
+  // Loop is empty. Image remains static.
+}
+`;
 
-  // 2. PERDE EFEKTİ İLE AÇILIŞ
-  for(int w = 0; w <= 128; w += 2) {
-    display.clearDisplay();
-    display.drawBitmap(0, 0, myBitmap, 128, 64, SSD1306_WHITE);
-    display.fillRect(w, 0, 128 - w, 64, SSD1306_BLACK);
-    display.display();
-    delay(15);
-  }
-
-  // 3. GÖRÜNTÜ SABİTLEME (10 SANİYE)
-  delay(10000);
-}`;
-
-    finalCodeBox.value = fullCode;
+    finalCodeBox.value = sketch;
 }
 </script>
 
