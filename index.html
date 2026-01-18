@@ -2,101 +2,101 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>OLED Bitmap Converter</title>
+    <title>OLED Code Generator</title>
     <style>
-        body { font-family: sans-serif; background: #1a1a1a; color: #eee; padding: 20px; text-align: center; }
-        #drop-zone { border: 2px dashed #444; padding: 40px; margin: 20px auto; width: 300px; cursor: pointer; border-radius: 10px; }
-        #drop-zone:hover { border-color: #007bff; background: #222; }
-        canvas { display: none; }
-        textarea { width: 90%; height: 300px; background: #000; color: #0f0; font-family: monospace; padding: 10px; border: 1px solid #333; margin-top: 20px; border-radius: 5px; }
-        .controls { margin: 20px; }
-        button { padding: 10px 20px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 5px; }
+        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #e0e0e0; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; background: #1e1e1e; padding: 20px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        textarea { width: 100%; height: 200px; background: #2d2d2d; color: #a6e22e; border: 1px solid #444; padding: 10px; font-family: monospace; border-radius: 5px; resize: vertical; }
+        .controls { margin: 20px 0; display: flex; gap: 20px; align-items: center; }
+        select, button { padding: 10px 15px; border-radius: 5px; border: none; cursor: pointer; }
+        button { background: #007bff; color: white; font-weight: bold; }
+        button:hover { background: #0056b3; }
+        #final-code { height: 400px; margin-top: 20px; background: #000; color: #66d9ef; }
+        label { font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h2>OLED (SSD1306) Image Converter</h2>
-    <p>Görseli buraya bırak (128x64 önerilir)</p>
+<div class="container">
+    <h2>OLED Projesi İçin Kod Oluşturucu</h2>
     
-    <div id="drop-zone">Resmi buraya sürükle veya tıkla</div>
-    <input type="file" id="file-input" style="display:none" accept="image/*">
+    <label>1. Bitmap Array'ini Buraya Yapıştır (0x... ile başlayan kısım):</label>
+    <textarea id="array-input" placeholder="const unsigned char myBitmap [] PROGMEM = { ... };"></textarea>
 
     <div class="controls">
-        Eşik Değeri (Kontrast): <input type="range" id="threshold" min="0" max="255" value="128">
+        <div>
+            <label>Platform:</label>
+            <select id="platform">
+                <option value="esp32">ESP32 (GPIO 21/22)</option>
+                <option value="arduino">Arduino (A4/A5)</option>
+            </select>
+        </div>
+        <button onclick="generateCode()">Kodu Oluştur (Perde Efektli)</button>
     </div>
 
-    <canvas id="canvas"></canvas>
-    <textarea id="output" readonly placeholder="C++ Array burada görünecek..."></textarea>
+    <label>2. Oluşturulan Arduino Sketch:</label>
+    <textarea id="final-code" readonly></textarea>
+</div>
 
-    <script>
-        const dropZone = document.getElementById('drop-zone');
-        const fileInput = document.getElementById('file-input');
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const output = document.getElementById('output');
-        const thresholdInput = document.getElementById('threshold');
+<script>
+function generateCode() {
+    const arrayData = document.getElementById('array-input').value.trim();
+    const platform = document.getElementById('platform').value;
+    const finalCodeBox = document.getElementById('final-code');
 
-        dropZone.onclick = () => fileInput.click();
+    if(!arrayData.includes('0x')) {
+        alert("Lütfen geçerli bir hex array yapıştırın!");
+        return;
+    }
 
-        fileInput.onchange = (e) => processImage(e.target.files[0]);
+    let setupConfig = (platform === 'esp32') 
+        ? "  Wire.begin(21, 22); // ESP32 Standart SDA, SCL\n  Wire.setClock(400000);" 
+        : "  // Arduino'da SDA=A4, SCL=A5 kullanılır\n  Wire.setClock(400000);";
 
-        dropZone.ondragover = (e) => { e.preventDefault(); dropZone.style.borderColor = '#007bff'; };
-        dropZone.ondragleave = () => { dropZone.style.borderColor = '#444'; };
-        dropZone.ondrop = (e) => {
-            e.preventDefault();
-            processImage(e.dataTransfer.files[0]);
-        };
+    const fullCode = `#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
-        thresholdInput.oninput = () => { if (currentImg) convert(); };
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET    -1
+#define SCREEN_ADDRESS 0x3C
 
-        let currentImg = null;
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-        function processImage(file) {
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                currentImg = new Image();
-                currentImg.onload = () => {
-                    canvas.width = 128;
-                    canvas.height = 64;
-                    // Görseli 128x64'e sığdır (boyutlandırma)
-                    ctx.drawImage(currentImg, 0, 0, 128, 64);
-                    convert();
-                };
-                currentImg.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
-        }
+${arrayData}
 
-        function convert() {
-            const imgData = ctx.getImageData(0, 0, 128, 64);
-            const data = imgData.data;
-            const threshold = parseInt(thresholdInput.value);
-            let bytes = [];
-            
-            for (let y = 0; y < 64; y++) {
-                for (let x = 0; x < 128; x += 8) {
-                    let byte = 0;
-                    for (let bit = 0; bit < 8; bit++) {
-                        const idx = ((y * 128) + (x + bit)) * 4;
-                        const avg = (data[idx] + data[idx+1] + data[idx+2]) / 3;
-                        if (avg < threshold) { // Siyah piksel (SSD1306_WHITE için genelde tersi kullanılır ama bu mantık çoğu araca uygundur)
-                            byte |= (1 << (7 - bit));
-                        }
-                    }
-                    bytes.push('0x' + byte.toString(16).padStart(2, '0'));
-                }
-            }
+void setup() {
+${setupConfig}
+  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+    for(;;);
+  }
+  display.clearDisplay();
+  display.display();
+}
 
-            let result = "const unsigned char myBitmap [] PROGMEM = {\n  ";
-            for (let i = 0; i < bytes.length; i++) {
-                result += bytes[i] + (i === bytes.length - 1 ? "" : ", ");
-                if ((i + 1) % 16 === 0) result += "\n  ";
-            }
-            result += "\n};";
-            
-            output.value = result;
-        }
-    </script>
+void loop() {
+  // 1. TAM KARANLIK (5 SANİYE)
+  display.clearDisplay();
+  display.display();
+  delay(5000);
+
+  // 2. PERDE EFEKTİ İLE AÇILIŞ
+  for(int w = 0; w <= 128; w += 2) {
+    display.clearDisplay();
+    display.drawBitmap(0, 0, myBitmap, 128, 64, SSD1306_WHITE);
+    display.fillRect(w, 0, 128 - w, 64, SSD1306_BLACK);
+    display.display();
+    delay(15);
+  }
+
+  // 3. GÖRÜNTÜ SABİTLEME (10 SANİYE)
+  delay(10000);
+}`;
+
+    finalCodeBox.value = fullCode;
+}
+</script>
+
 </body>
 </html>
