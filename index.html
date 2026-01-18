@@ -2,171 +2,149 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Ultimate GIF to OLED Converter</title>
+    <title>OLED All-in-One Generator</title>
     <script src="https://unpkg.com/omggif@1.0.10/omggif.js"></script>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #0c0c0c; color: #e0e0e0; padding: 20px; }
-        .container { max-width: 1000px; margin: 0 auto; background: #161616; padding: 25px; border-radius: 10px; border: 1px solid #333; }
-        h2 { color: #00d4ff; margin-top: 0; text-transform: uppercase; letter-spacing: 2px; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-        .panel { background: #222; padding: 15px; border-radius: 8px; }
-        input, select, button { width: 100%; padding: 12px; margin-top: 10px; background: #333; color: #fff; border: 1px solid #444; border-radius: 4px; box-sizing: border-box; }
-        button { background: #00d4ff; color: #000; font-weight: bold; cursor: pointer; border: none; margin-top: 20px; font-size: 16px; }
-        button:hover { background: #0099bb; }
-        textarea { width: 100%; height: 400px; background: #000; color: #00ff00; border: 1px solid #444; padding: 10px; font-family: monospace; border-radius: 5px; margin-top: 15px; }
-        label { font-size: 12px; color: #888; font-weight: bold; }
-        canvas { display: none; }
+        .container { max-width: 1100px; margin: 0 auto; background: #161616; padding: 30px; border-radius: 12px; border: 1px solid #333; }
+        h2 { color: #00d4ff; border-bottom: 2px solid #00d4ff; padding-bottom: 10px; margin-top: 0; text-transform: uppercase; }
+        .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-bottom: 20px; }
+        .panel { background: #222; padding: 20px; border-radius: 10px; border: 1px solid #444; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; font-size: 13px; color: #00d4ff; }
+        textarea { width: 100%; height: 120px; background: #000; color: #0f0; border: 1px solid #444; padding: 10px; font-family: monospace; border-radius: 5px; box-sizing: border-box; }
+        select, input, button { width: 100%; padding: 12px; margin-top: 10px; background: #333; color: #fff; border: 1px solid #444; border-radius: 6px; box-sizing: border-box; }
+        button { background: #00d4ff; color: #000; font-weight: bold; cursor: pointer; border: none; transition: 0.3s; }
+        button:hover { background: #0099bb; transform: translateY(-2px); }
+        .copy-btn { background: #ff9d00; margin-top: 10px; }
+        #final-code { height: 400px; color: #ff9d00; margin-top: 15px; }
+        .footer { margin-top: 25px; text-align: center; font-size: 14px; background: #222; padding: 15px; border-radius: 8px; }
+        a { color: #00d4ff; text-decoration: none; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>GIF to OLED Code Generator</h2>
+    <h2>OLED Pro Master Tool</h2>
     
-    <div class="grid">
+    <div class="main-grid">
         <div class="panel">
-            <label>1. UPLOAD GIF</label>
+            <label>OPTION A: PASTE EXISTING ARRAY</label>
+            <textarea id="array-input" placeholder="Paste const unsigned char myBitmap [] PROGMEM = {...}; here"></textarea>
+            <button onclick="generateFromStatic()">GENERATE FROM STATIC</button>
+        </div>
+
+        <div class="panel">
+            <label>OPTION B: UPLOAD GIF FILE</label>
             <input type="file" id="gif-file" accept="image/gif">
-            
-            <label style="margin-top:15px; display:block;">2. SCREEN SIZE</label>
+            <select id="scale-mode">
+                <option value="contain">Keep Proportions (Letterbox)</option>
+                <option value="stretch">Stretch to Fill Screen</option>
+            </select>
+            <button onclick="processGif()">CONVERT GIF TO CODE</button>
+        </div>
+    </div>
+
+    <div class="panel">
+        <label>GLOBAL SETTINGS</label>
+        <div style="display: flex; gap: 10px;">
+            <select id="platform">
+                <option value="esp32">ESP32 (GPIO 21/22)</option>
+                <option value="arduino">Arduino (A4/A5)</option>
+            </select>
             <select id="resolution">
                 <option value="128x64">128 x 64</option>
                 <option value="128x32">128 x 32</option>
             </select>
         </div>
         
-        <div class="panel">
-            <label>3. SCALING MODE</label>
-            <select id="scale-mode">
-                <option value="stretch">Stretch to Fill</option>
-                <option value="contain">Maintain Aspect Ratio (Fit)</option>
-            </select>
-
-            <label style="margin-top:15px; display:block;">4. PLATFORM</label>
-            <select id="platform">
-                <option value="esp32">ESP32 (GPIO 21/22)</option>
-                <option value="arduino">Arduino (A4/A5)</option>
-            </select>
-        </div>
+        <textarea id="final-code" readonly placeholder="Your C++ code will appear here..."></textarea>
+        <button class="copy-btn" onclick="copyToClipboard()">COPY TO CLIPBOARD</button>
     </div>
 
-    <button onclick="processGif()">PROCESS GIF & GENERATE CODE</button>
-
-    <textarea id="output-code" readonly placeholder="Resulting C++ code will appear here..."></textarea>
-    <canvas id="temp-canvas"></canvas>
+    <div class="footer">
+        Manual Conversion: <a href="https://javl.github.io/image2cpp/" target="_blank">image2cpp</a>
+    </div>
 </div>
 
+<canvas id="temp-canvas" style="display:none;"></canvas>
+
 <script>
-async function processGif() {
-    const fileInput = document.getElementById('gif-file');
-    if (!fileInput.files[0]) { alert("Please select a GIF first!"); return; }
+const output = document.getElementById('final-code');
 
+function copyToClipboard() {
+    output.select();
+    document.execCommand('copy');
+    alert("Code copied to clipboard!");
+}
+
+function getBaseConfig() {
     const res = document.getElementById('resolution').value.split('x');
-    const width = parseInt(res[0]);
-    const height = parseInt(res[1]);
-    const scaleMode = document.getElementById('scale-mode').value;
-    const platform = document.getElementById('platform').value;
-
-    const fileReader = new FileReader();
-    fileReader.readAsArrayBuffer(fileInput.files[0]);
-    
-    fileReader.onload = function() {
-        const gifReader = new Uint8Array(fileReader.result);
-        const gif = new omggif.GifReader(gifReader);
-        
-        let allFramesArray = "";
-        const canvas = document.getElementById('temp-canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = width;
-        canvas.height = height;
-
-        const numFrames = gif.numFrames();
-        
-        for (let i = 0; i < numFrames; i++) {
-            const frameInfo = gif.frameInfo(i);
-            const frameData = new Uint8ClampedArray(gif.width * gif.height * 4);
-            gif.decodeAndBlitFrameRGBA(i, frameData);
-
-            // Create temporary canvas for original frame
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = gif.width;
-            tempCanvas.height = gif.height;
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCtx.putImageData(new ImageData(frameData, gif.width, gif.height), 0, 0);
-
-            // Draw to main canvas with scaling logic
-            ctx.fillStyle = "black";
-            ctx.fillRect(0, 0, width, height);
-            
-            if (scaleMode === 'stretch') {
-                ctx.drawImage(tempCanvas, 0, 0, width, height);
-            } else {
-                const ratio = Math.min(width / gif.width, height / gif.height);
-                const x = (width - gif.width * ratio) / 2;
-                const y = (height - gif.height * ratio) / 2;
-                ctx.drawImage(tempCanvas, x, y, gif.width * ratio, gif.height * ratio);
-            }
-
-            // Convert to Bitmap
-            const imgData = ctx.getImageData(0, 0, width, height).data;
-            let bytes = [];
-            for (let y = 0; y < height; y++) {
-                for (let x = 0; x < width; x += 8) {
-                    let byte = 0;
-                    for (let bit = 0; bit < 8; bit++) {
-                        const idx = ((y * width) + (x + bit)) * 4;
-                        const avg = (imgData[idx] + imgData[idx+1] + imgData[idx+2]) / 3;
-                        if (avg > 128) byte |= (1 << (7 - bit)); // Simple threshold
-                    }
-                    bytes.push('0x' + byte.toString(16).padStart(2, '0'));
-                }
-            }
-            allFramesArray += `const unsigned char frame${i} [] PROGMEM = {\n  ${bytes.join(', ')}\n};\n\n`;
-        }
-
-        generateFinalCode(allFramesArray, numFrames, width, height, platform);
+    return {
+        width: parseInt(res[0]),
+        height: parseInt(res[1]),
+        platform: document.getElementById('platform').value,
+        wire: document.getElementById('platform').value === 'esp32' ? "Wire.begin(21, 22);" : "Wire.begin();"
     };
 }
 
-function generateFinalCode(arrays, count, w, h, platform) {
-    let wireInit = (platform === 'esp32') ? "Wire.begin(21, 22);" : "Wire.begin();";
-    let frameList = "";
-    for(let i=0; i<count; i++) frameList += `frame${i}${i==count-1?'':','}`;
+// FUNCTION 1: STATIC GENERATOR (YOUR ORIGINAL REQUEST)
+function generateFromStatic() {
+    const data = document.getElementById('array-input').value.trim();
+    const config = getBaseConfig();
+    if(!data.includes('0x')) return alert("Paste valid array!");
 
-    const code = `#include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-
-#define SCREEN_WIDTH ${w}
-#define SCREEN_HEIGHT ${h}
-#define SCREEN_ADDRESS 0x3C
-
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
-
-${arrays}
-
-const unsigned char* animation_frames[] = {
-  ${frameList}
-};
-
-void setup() {
-  ${wireInit}
-  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
-    for(;;);
-  }
+    output.value = `#include <Wire.h>\n#include <Adafruit_GFX.h>\n#include <Adafruit_SSD1306.h>\n\n#define SCREEN_WIDTH ${config.width}\n#define SCREEN_HEIGHT ${config.height}\n#define SCREEN_ADDRESS 0x3C\n\nAdafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);\n\n${data}\n\nvoid setup() {\n  ${config.wire}\n  display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS);\n  display.clearDisplay();\n  display.drawBitmap(0, 0, myBitmap, ${config.width}, ${config.height}, 1);\n  display.display();\n}\n\nvoid loop() {}`;
 }
 
-void loop() {
-  for(int i = 0; i < ${count}; i++) {
-    display.clearDisplay();
-    display.drawBitmap(0, 0, animation_frames[i], ${w}, ${h}, 1);
-    display.display();
-    delay(50); // Adjust speed here
-  }
-}`;
-    document.getElementById('output-code').value = code;
+// FUNCTION 2: GIF PROCESSOR
+async function processGif() {
+    const file = document.getElementById('gif-file').files[0];
+    if (!file) return alert("Select a GIF!");
+    const config = getBaseConfig();
+    const scale = document.getElementById('scale-mode').value;
+
+    const reader = new FileReader();
+    reader.readAsArrayBuffer(file);
+    reader.onload = function() {
+        const gif = new omggif.GifReader(new Uint8Array(reader.result));
+        let arrays = "";
+        let frameNames = [];
+        const canvas = document.getElementById('temp-canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = config.width; canvas.height = config.height;
+
+        for (let i = 0; i < gif.numFrames(); i++) {
+            const frameData = new Uint8ClampedArray(gif.width * gif.height * 4);
+            gif.decodeAndBlitFrameRGBA(i, frameData);
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = gif.width; tempCanvas.height = gif.height;
+            tempCanvas.getContext('2d').putImageData(new ImageData(frameData, gif.width, gif.height), 0, 0);
+
+            ctx.fillStyle = "black"; ctx.fillRect(0, 0, config.width, config.height);
+            if (scale === 'stretch') ctx.drawImage(tempCanvas, 0, 0, config.width, config.height);
+            else {
+                const r = Math.min(config.width / gif.width, config.height / gif.height);
+                ctx.drawImage(tempCanvas, (config.width - gif.width*r)/2, (config.height - gif.height*r)/2, gif.width*r, gif.height*r);
+            }
+
+            const img = ctx.getImageData(0, 0, config.width, config.height).data;
+            let bytes = [];
+            for (let y = 0; y < config.height; y++) {
+                for (let x = 0; x < config.width; x += 8) {
+                    let b = 0;
+                    for (let bit = 0; bit < 8; bit++) {
+                        if ((img[((y * config.width) + (x + bit)) * 4] + img[((y * config.width) + (x + bit)) * 4 + 1] + img[((y * config.width) + (x + bit)) * 4 + 2]) / 3 > 128) b |= (1 << (7 - bit));
+                    }
+                    bytes.push('0x' + b.toString(16).padStart(2, '0'));
+                }
+            }
+            arrays += `const unsigned char frame${i} [] PROGMEM = {\n  ${bytes.join(', ')}\n};\n\n`;
+            frameNames.push(`frame${i}`);
+        }
+
+        output.value = `#include <Wire.h>\n#include <Adafruit_GFX.h>\n#include <Adafruit_SSD1306.h>\n\n#define W ${config.width}\n#define H ${config.height}\nAdafruit_SSD1306 display(W, H, &Wire, -1);\n\n${arrays}\nconst unsigned char* frames[] = {${frameNames.join(',')}};\n\nvoid setup() {\n  ${config.wire}\n  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);\n}\n\nvoid loop() {\n  for(int i=0; i<${gif.numFrames()}; i++) {\n    display.clearDisplay();\n    display.drawBitmap(0, 0, frames[i], W, H, 1);\n    display.display();\n    delay(50);\n  }\n}`;
+    };
 }
 </script>
-
 </body>
 </html>
