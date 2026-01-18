@@ -2,130 +2,142 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>OLED ULTIMATE TOOL</title>
+    <title>OLED FULL ANIMATION GENERATOR</title>
+    <script src="https://unpkg.com/omggif@1.0.10/omggif.js"></script>
     <style>
-        body { font-family: 'Consolas', monospace; background: #050505; color: #00ff00; padding: 20px; }
-        .wrapper { max-width: 900px; margin: 0 auto; border: 1px solid #00ff00; padding: 20px; box-shadow: 0 0 15px #00ff0033; }
-        h2 { text-align: center; color: #fff; text-shadow: 0 0 5px #00ff00; margin-top: 0; }
+        body { font-family: 'Courier New', monospace; background: #000; color: #00ff00; padding: 20px; }
+        .container { max-width: 950px; margin: 0 auto; border: 2px solid #00ff00; padding: 20px; background: #050505; }
         .row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-        .box { background: #111; border: 1px solid #333; padding: 15px; border-radius: 4px; }
-        textarea { width: 100%; height: 120px; background: #000; color: #0f0; border: 1px solid #00ff00; padding: 8px; font-size: 12px; box-sizing: border-box; }
-        select, input, button { width: 100%; padding: 12px; margin-top: 10px; background: #222; color: #fff; border: 1px solid #444; cursor: pointer; }
-        button { background: #00ff00; color: #000; font-weight: bold; border: none; }
-        button:hover { background: #00cc00; box-shadow: 0 0 10px #00ff00; }
-        #final-code { height: 350px; color: #ffcc00; border-color: #ffcc00; margin-top: 15px; }
-        label { font-size: 10px; color: #888; font-weight: bold; }
+        .panel { border: 1px solid #444; padding: 15px; background: #111; }
+        textarea { width: 100%; height: 120px; background: #000; color: #0f0; border: 1px solid #00ff00; padding: 5px; font-size: 11px; }
+        select, input, button { width: 100%; padding: 10px; margin-top: 10px; background: #222; color: #fff; border: 1px solid #555; cursor: pointer; }
+        button { background: #00ff00; color: #000; font-weight: bold; border: none; font-size: 14px; }
+        button:hover { background: #fff; box-shadow: 0 0 10px #00ff00; }
+        #final-code { height: 400px; color: #00d4ff; border-color: #00d4ff; }
+        label { font-size: 12px; color: #aaa; font-weight: bold; }
+        .status { color: #ff0000; font-size: 12px; margin-top: 5px; display: none; }
     </style>
 </head>
 <body>
 
-<div class="wrapper">
-    <h2>OLED PRO TOOL [NO-LIBRARY VERSION]</h2>
+<div class="container">
+    <h2 style="text-align:center;">OLED ANIMATION MASTER</h2>
     
     <div class="row">
-        <div class="box">
-            <label>OPTION A: STATIC BITMAP ARRAY</label>
-            <textarea id="inp-static" placeholder="Paste: const unsigned char myBitmap [] PROGMEM = {...};"></textarea>
-            <button onclick="doStatic()">BUILD STATIC SKETCH</button>
+        <div class="panel">
+            <label>OPTION A: STATIC BITMAP (ARRAY)</label>
+            <textarea id="static-input" placeholder="Paste your myBitmap array here..."></textarea>
+            <button onclick="buildStatic()">GENERATE STATIC SKETCH</button>
         </div>
         
-        <div class="box">
-            <label>OPTION B: UPLOAD GIF</label>
-            <input type="file" id="inp-gif" accept="image/gif">
-            <select id="sel-scale">
-                <option value="stretch">STRETCH TO FILL</option>
-                <option value="fit">MAINTAIN ASPECT RATIO</option>
-            </select>
-            <button onclick="doGif()">CONVERT GIF TO ANIMATION</button>
+        <div class="panel">
+            <label>OPTION B: GIF FILE (ALL FRAMES)</label>
+            <input type="file" id="gif-input" accept="image/gif">
+            <input type="number" id="frame-delay" value="50" placeholder="Delay (ms)">
+            <button onclick="buildAnimation()">GENERATE ANIMATED SKETCH</button>
+            <div id="status" class="status">Processing frames... please wait.</div>
         </div>
     </div>
 
-    <div class="box">
-        <label>SYSTEM SETTINGS</label>
+    <div class="panel">
+        <label>GLOBAL SYSTEM CONFIG</label>
         <div style="display:flex; gap:10px;">
-            <select id="sel-plat">
+            <select id="platform">
                 <option value="esp32">ESP32 (GPIO 21/22)</option>
                 <option value="arduino">ARDUINO (A4/A5)</option>
             </select>
-            <select id="sel-res">
+            <select id="res">
                 <option value="128x64">128x64</option>
                 <option value="128x32">128x32</option>
             </select>
         </div>
-        <textarea id="final-code" readonly placeholder="Final C++ code will output here..."></textarea>
-        <button onclick="copyOut()" style="background:#ffcc00;">COPY CLIPBOARD</button>
+        <textarea id="final-code" readonly placeholder="C++ Code Output..."></textarea>
+        <button onclick="copyCode()" style="background:#00d4ff;">COPY TO CLIPBOARD</button>
     </div>
 </div>
 
-<canvas id="cvs" style="display:none;"></canvas>
+<canvas id="canvas" style="display:none;"></canvas>
 
 <script>
 const output = document.getElementById('final-code');
-const canvas = document.getElementById('cvs');
+const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
-function copyOut() {
+function copyCode() {
     output.select();
     document.execCommand('copy');
-    alert("Copied to clipboard!");
+    alert("Code Copied!");
 }
 
-function getBase() {
-    const r = document.getElementById('sel-res').value.split('x');
+function getSettings() {
+    const r = document.getElementById('res').value.split('x');
     return {
         w: parseInt(r[0]),
         h: parseInt(r[1]),
-        wire: document.getElementById('sel-plat').value === 'esp32' ? "Wire.begin(21, 22);" : "Wire.begin();"
+        wire: document.getElementById('platform').value === 'esp32' ? "Wire.begin(21, 22);" : "Wire.begin();"
     };
 }
 
-function doStatic() {
-    const b = getBase();
-    const arr = document.getElementById('inp-static').value.trim();
-    if(!arr.includes('0x')) { alert("Error: No valid hex data found!"); return; }
-
-    output.value = `#include <Wire.h>\n#include <Adafruit_GFX.h>\n#include <Adafruit_SSD1306.h>\n\n#define W ${b.w}\n#define H ${b.h}\nAdafruit_SSD1306 display(W, H, &Wire, -1);\n\n${arr}\n\nvoid setup() {\n  ${b.wire}\n  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);\n  display.clearDisplay();\n  display.drawBitmap(0, 0, myBitmap, W, H, 1);\n  display.display();\n}\n\nvoid loop() {}`;
+function buildStatic() {
+    const s = getSettings();
+    const arr = document.getElementById('static-input').value.trim();
+    if(!arr.includes('0x')) return alert("Error: Invalid Array");
+    
+    output.value = `#include <Wire.h>\n#include <Adafruit_GFX.h>\n#include <Adafruit_SSD1306.h>\n\n#define W ${s.w}\n#define H ${s.h}\nAdafruit_SSD1306 display(W, H, &Wire, -1);\n\n${arr}\n\nvoid setup() {\n  ${s.wire}\n  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);\n  display.clearDisplay();\n  display.drawBitmap(0, 0, myBitmap, W, H, 1);\n  display.display();\n}\n\nvoid loop() {}`;
 }
 
-async function doGif() {
-    const file = document.getElementById('inp-gif').files[0];
-    if(!file) { alert("Select a GIF file!"); return; }
-    
-    const b = getBase();
-    const mode = document.getElementById('sel-scale').value;
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    
-    img.onload = function() {
-        canvas.width = b.w; canvas.height = b.h;
-        ctx.fillStyle = "black";
-        ctx.fillRect(0,0,b.w,b.h);
-        
-        if(mode === 'stretch') {
-            ctx.drawImage(img, 0, 0, b.w, b.h);
-        } else {
-            const ratio = Math.min(b.w / img.width, b.h / img.height);
-            ctx.drawImage(img, (b.w - img.width*ratio)/2, (b.h - img.height*ratio)/2, img.width*ratio, img.height*ratio);
-        }
+function buildAnimation() {
+    const file = document.getElementById('gif-input').files[0];
+    if(!file) return alert("Select a GIF!");
+    document.getElementById('status').style.display = "block";
 
-        const pixels = ctx.getImageData(0,0,b.w,b.h).data;
-        let hex = [];
-        for(let y=0; y<b.h; y++) {
-            for(let x=0; x<b.w; x+=8) {
-                let byte = 0;
-                for(let k=0; k<8; k++) {
-                    const idx = ((y*b.w)+(x+k))*4;
-                    if((pixels[idx]+pixels[idx+1]+pixels[idx+2])/3 > 128) byte |= (1 << (7-k));
+    const s = getSettings();
+    const delay = document.getElementById('frame-delay').value;
+    const reader = new FileReader();
+    
+    reader.onload = function(e) {
+        const gifData = new Uint8Array(e.target.result);
+        const gifReader = new omggif.GifReader(gifData);
+        const numFrames = gifReader.numFrames();
+        
+        let allArrays = "";
+        let frameNames = [];
+        canvas.width = s.w;
+        canvas.height = s.h;
+
+        for (let i = 0; i < numFrames; i++) {
+            const framePixels = new Uint8ClampedArray(gifReader.width * gifReader.height * 4);
+            gifReader.decodeAndBlitFrameRGBA(i, framePixels);
+
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = gifReader.width;
+            tempCanvas.height = gifReader.height;
+            tempCanvas.getContext('2d').putImageData(new ImageData(framePixels, gifReader.width, gifReader.height), 0, 0);
+
+            ctx.fillStyle = "black";
+            ctx.fillRect(0, 0, s.w, s.h);
+            ctx.drawImage(tempCanvas, 0, 0, s.w, s.h);
+
+            const imgData = ctx.getImageData(0, 0, s.w, s.h).data;
+            let bytes = [];
+            for (let y = 0; y < s.h; y++) {
+                for (let x = 0; x < s.w; x += 8) {
+                    let b = 0;
+                    for (let k = 0; k < 8; k++) {
+                        const idx = ((y * s.w) + (x + k)) * 4;
+                        if ((imgData[idx] + imgData[idx+1] + imgData[idx+2]) / 3 > 128) b |= (1 << (7 - k));
+                    }
+                    bytes.push('0x' + b.toString(16).padStart(2, '0'));
                 }
-                hex.push('0x' + byte.toString(16).padStart(2,'0'));
             }
+            allArrays += `const unsigned char frame${i} [] PROGMEM = {\n  ${bytes.join(',')}\n};\n\n`;
+            frameNames.push(`frame${i}`);
         }
-        
-        const arrayCode = `const unsigned char myBitmap [] PROGMEM = {\n  ${hex.join(', ')}\n};`;
-        output.value = `#include <Wire.h>\n#include <Adafruit_GFX.h>\n#include <Adafruit_SSD1306.h>\n\n#define W ${b.w}\n#define H ${b.h}\nAdafruit_SSD1306 display(W, H, &Wire, -1);\n\n${arrayCode}\n\nvoid setup() {\n  ${b.wire}\n  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);\n  display.clearDisplay();\n  display.drawBitmap(0, 0, myBitmap, W, H, 1);\n  display.display();\n}\n\nvoid loop() {}`;
-        URL.revokeObjectURL(url);
+
+        output.value = `#include <Wire.h>\n#include <Adafruit_GFX.h>\n#include <Adafruit_SSD1306.h>\n\n#define W ${s.w}\n#define H ${s.h}\nAdafruit_SSD1306 display(W, H, &Wire, -1);\n\n${allArrays}\nconst unsigned char* frames[] = {\n  ${frameNames.join(',')}\n};\n\nvoid setup() {\n  ${s.wire}\n  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);\n}\n\nvoid loop() {\n  for(int i = 0; i < ${numFrames}; i++) {\n    display.clearDisplay();\n    display.drawBitmap(0, 0, frames[i], W, H, 1);\n    display.display();\n    delay(${delay});\n  }\n}`;
+        document.getElementById('status').style.display = "none";
     };
-    img.src = url;
+    reader.readAsArrayBuffer(file);
 }
 </script>
 </body>
