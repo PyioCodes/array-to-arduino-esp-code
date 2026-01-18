@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>OLED FULL ANIMATION GENERATOR</title>
+    <title>OLED ANIMATION MASTER + PROGRESS</title>
     <script src="https://unpkg.com/omggif@1.0.10/omggif.js"></script>
     <style>
         body { font-family: 'Courier New', monospace; background: #000; color: #00ff00; padding: 20px; }
@@ -14,8 +14,11 @@
         button { background: #00ff00; color: #000; font-weight: bold; border: none; font-size: 14px; }
         button:hover { background: #fff; box-shadow: 0 0 10px #00ff00; }
         #final-code { height: 400px; color: #00d4ff; border-color: #00d4ff; }
-        label { font-size: 12px; color: #aaa; font-weight: bold; }
-        .status { color: #ff0000; font-size: 12px; margin-top: 5px; display: none; }
+        
+        /* Progress Bar Styles */
+        #progress-container { width: 100%; background: #333; height: 20px; margin-top: 15px; display: none; border-radius: 10px; overflow: hidden; }
+        #progress-bar { width: 0%; height: 100%; background: #00ff00; transition: width 0.1s; }
+        #status-text { text-align: center; font-size: 12px; margin-top: 5px; color: #00ff00; }
     </style>
 </head>
 <body>
@@ -34,8 +37,13 @@
             <label>OPTION B: GIF FILE (ALL FRAMES)</label>
             <input type="file" id="gif-input" accept="image/gif">
             <input type="number" id="frame-delay" value="50" placeholder="Delay (ms)">
-            <button onclick="buildAnimation()">GENERATE ANIMATED SKETCH</button>
-            <div id="status" class="status">Processing frames... please wait.</div>
+            
+            <div id="progress-container">
+                <div id="progress-bar"></div>
+            </div>
+            <div id="status-text"></div>
+            
+            <button id="gif-btn" onclick="buildAnimation()">GENERATE ANIMATED SKETCH</button>
         </div>
     </div>
 
@@ -62,6 +70,9 @@
 const output = document.getElementById('final-code');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
+const pBar = document.getElementById('progress-bar');
+const pCont = document.getElementById('progress-container');
+const sText = document.getElementById('status-text');
 
 function copyCode() {
     output.select();
@@ -82,20 +93,21 @@ function buildStatic() {
     const s = getSettings();
     const arr = document.getElementById('static-input').value.trim();
     if(!arr.includes('0x')) return alert("Error: Invalid Array");
-    
     output.value = `#include <Wire.h>\n#include <Adafruit_GFX.h>\n#include <Adafruit_SSD1306.h>\n\n#define W ${s.w}\n#define H ${s.h}\nAdafruit_SSD1306 display(W, H, &Wire, -1);\n\n${arr}\n\nvoid setup() {\n  ${s.wire}\n  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);\n  display.clearDisplay();\n  display.drawBitmap(0, 0, myBitmap, W, H, 1);\n  display.display();\n}\n\nvoid loop() {}`;
 }
 
-function buildAnimation() {
+async function buildAnimation() {
     const file = document.getElementById('gif-input').files[0];
     if(!file) return alert("Select a GIF!");
-    document.getElementById('status').style.display = "block";
 
+    pCont.style.display = "block";
+    sText.innerText = "Initializing GIF data...";
+    
     const s = getSettings();
-    const delay = document.getElementById('frame-delay').value;
+    const delayVal = document.getElementById('frame-delay').value;
     const reader = new FileReader();
     
-    reader.onload = function(e) {
+    reader.onload = async function(e) {
         const gifData = new Uint8Array(e.target.result);
         const gifReader = new omggif.GifReader(gifData);
         const numFrames = gifReader.numFrames();
@@ -106,6 +118,7 @@ function buildAnimation() {
         canvas.height = s.h;
 
         for (let i = 0; i < numFrames; i++) {
+            // Processing Frame
             const framePixels = new Uint8ClampedArray(gifReader.width * gifReader.height * 4);
             gifReader.decodeAndBlitFrameRGBA(i, framePixels);
 
@@ -130,12 +143,20 @@ function buildAnimation() {
                     bytes.push('0x' + b.toString(16).padStart(2, '0'));
                 }
             }
-            allArrays += `const unsigned char frame${i} [] PROGMEM = {\n  ${bytes.join(',')}\n};\n\n`;
+            allArrays += `const unsigned char frame${i} [] PROGMEM = {${bytes.join(',')}};\n`;
             frameNames.push(`frame${i}`);
+
+            // Update UI
+            let percent = Math.round(((i + 1) / numFrames) * 100);
+            pBar.style.width = percent + "%";
+            sText.innerText = `Processing Frame: ${i + 1} / ${numFrames} (${percent}%)`;
+            
+            // Artificial pause to allow UI thread to update
+            if (i % 5 === 0) await new Promise(r => setTimeout(r, 1));
         }
 
-        output.value = `#include <Wire.h>\n#include <Adafruit_GFX.h>\n#include <Adafruit_SSD1306.h>\n\n#define W ${s.w}\n#define H ${s.h}\nAdafruit_SSD1306 display(W, H, &Wire, -1);\n\n${allArrays}\nconst unsigned char* frames[] = {\n  ${frameNames.join(',')}\n};\n\nvoid setup() {\n  ${s.wire}\n  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);\n}\n\nvoid loop() {\n  for(int i = 0; i < ${numFrames}; i++) {\n    display.clearDisplay();\n    display.drawBitmap(0, 0, frames[i], W, H, 1);\n    display.display();\n    delay(${delay});\n  }\n}`;
-        document.getElementById('status').style.display = "none";
+        output.value = `#include <Wire.h>\n#include <Adafruit_GFX.h>\n#include <Adafruit_SSD1306.h>\n\n#define W ${s.w}\n#define H ${s.h}\nAdafruit_SSD1306 display(W, H, &Wire, -1);\n\n${allArrays}\nconst unsigned char* frames[] = {${frameNames.join(',')}};\n\nvoid setup() {\n  ${s.wire}\n  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);\n}\n\nvoid loop() {\n  for(int i = 0; i < ${numFrames}; i++) {\n    display.clearDisplay();\n    display.drawBitmap(0, 0, frames[i], W, H, 1);\n    display.display();\n    delay(${delayVal});\n  }\n}`;
+        sText.innerText = "Success! Code Generated.";
     };
     reader.readAsArrayBuffer(file);
 }
